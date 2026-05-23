@@ -1,0 +1,10 @@
+linadmin/c/linux_prog
+linadmin/kmod/*.ko
+linadmin/kmod/*.o
+linadmin/kmod/*.mod*
+linadmin/kmod/.*.cmd
+linadmin/kmod/Module.symvers
+linadmin/kmod/modules.order
+linadmin/logs/backup_*.tar.gz
+linadmin/logs/cron_backup*
+linadmin/logs/apt_history.log
