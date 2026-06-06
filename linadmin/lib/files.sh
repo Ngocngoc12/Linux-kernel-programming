@@ -61,3 +61,104 @@ files_cleanup_interactive() {
     show_result "Cleanup xong" "Đã xử lý ~$count file.\n\n$(cat /tmp/linadmin_cleanup_$$.log)"
     rm -f "/tmp/linadmin_cleanup_$$.log"
 }
+
+# Non-interactive CLI functions
+backup_directory() {
+    local src="$1"
+    if [[ -z "$src" ]]; then
+        echo "Usage: backup_directory <directory>"
+        return 1
+    fi
+    if [[ ! -d "$src" ]]; then
+        echo "Error: Directory '$src' does not exist"
+        return 1
+    fi
+    local name
+    name=$(basename "$src")
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local dest
+    # Save to logs folder if LINADMIN_ROOT is set, otherwise current directory
+    if [[ -n "${LINADMIN_ROOT:-}" ]]; then
+        dest="$LINADMIN_ROOT/logs/${name}_${timestamp}.tar.gz"
+    else
+        dest="${name}_${timestamp}.tar.gz"
+    fi
+    
+    echo "Backing up directory '$src' to '$dest'..."
+    if tar -czf "$dest" -C "$(dirname "$src")" "$(basename "$src")" 2>&1; then
+        echo "✓ Backup successful: $dest"
+        if [[ -n "${LOG_FILE:-}" ]]; then
+            echo "[$(date -Iseconds)] backup_directory: $src -> $dest" >> "$LOG_FILE"
+        fi
+        return 0
+    else
+        echo "Error: Backup failed"
+        return 1
+    fi
+}
+
+find_files_by_extension() {
+    local dir="$1"
+    local ext="$2"
+    if [[ -z "$dir" || -z "$ext" ]]; then
+        echo "Usage: find_files_by_extension <directory> <extension>"
+        return 1
+    fi
+    if [[ ! -d "$dir" ]]; then
+        echo "Error: Directory '$dir' does not exist"
+        return 1
+    fi
+    [[ "$ext" == .* ]] || ext=".$ext"
+    
+    echo "Finding files with extension '*$ext' in '$dir':"
+    local count=0
+    local found=""
+    found=$(find "$dir" -type f -name "*${ext}" 2>/dev/null | head -50)
+    if [[ -n "$found" ]]; then
+        echo "$found"
+        count=$(echo "$found" | wc -l)
+    fi
+    echo "Total: $count file(s) found."
+    if [[ -n "${LOG_FILE:-}" ]]; then
+        echo "[$(date -Iseconds)] find_files_by_extension: dir=$dir ext=$ext count=$count" >> "$LOG_FILE"
+    fi
+}
+
+cleanup_old_files() {
+    local dir="$1"
+    local days="$2"
+    if [[ -z "$dir" || -z "$days" ]]; then
+        echo "Usage: cleanup_old_files <directory> <days>"
+        return 1
+    fi
+    if [[ ! -d "$dir" ]]; then
+        echo "Error: Directory '$dir' does not exist"
+        return 1
+    fi
+    if [[ ! "$days" =~ ^[0-9]+$ ]]; then
+        echo "Error: Days must be a non-negative integer"
+        return 1
+    fi
+    
+    echo "Cleaning up files in '$dir' older than $days days (maxdepth 1)..."
+    local list
+    list=$(find "$dir" -maxdepth 1 -type f -mtime +"$days" 2>/dev/null)
+    if [[ -z "$list" ]]; then
+        echo "No files found older than $days days."
+        return 0
+    fi
+    
+    local count=0
+    echo "$list" | while read -r f; do
+        if [[ -n "$f" ]]; then
+            rm -fv "$f"
+            count=$((count+1))
+        fi
+    done
+    echo "✓ Cleanup complete. Processed $count file(s)."
+    if [[ -n "${LOG_FILE:-}" ]]; then
+        echo "[$(date -Iseconds)] cleanup_old_files: dir=$dir days=$days count=$count" >> "$LOG_FILE"
+    fi
+}
+

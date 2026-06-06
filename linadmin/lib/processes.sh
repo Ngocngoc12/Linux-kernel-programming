@@ -32,3 +32,39 @@ proc_run_interactive() {
     log_msg "linux_prog proc"
     run_and_show "Process Mode (fork/exec/wait)" "$C_BIN" proc
 }
+
+# Non-interactive CLI functions
+list_processes() {
+    ps aux --sort=-%mem | head -30
+}
+
+show_resource_usage() {
+    echo "=== CPU Load & Uptime ==="
+    uptime
+    echo ""
+    echo "=== Memory Stats ==="
+    free -h
+    echo ""
+    echo "=== Disk Usage ==="
+    df -h /
+}
+
+kill_process() {
+    local pid="$1"
+    if [[ -z "$pid" ]]; then
+        echo "Usage: kill_process <pid>"
+        return 1
+    fi
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "Killing process $pid..."
+        sudo kill -9 "$pid"
+        echo "✓ Process $pid terminated"
+        if [[ -n "${LOG_FILE:-}" ]]; then
+            echo "[$(date -Iseconds)] kill_process: $pid" >> "$LOG_FILE"
+        fi
+    else
+        echo "Error: Process PID $pid does not exist or permission denied"
+        return 1
+    fi
+}
+

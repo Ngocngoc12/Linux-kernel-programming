@@ -58,3 +58,31 @@ pkg_view_history() {
         show_result "APT History" "(empty)"
     fi
 }
+
+# Non-interactive CLI functions
+install_package() {
+    local pkg="$1"
+    if [[ -z "$pkg" ]]; then
+        echo "Usage: install_package <package>"
+        return 1
+    fi
+    pkg_log "INSTALL $pkg"
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg"
+    pkg_log "INSTALL $pkg OK"
+}
+
+remove_package() {
+    local pkg="$1"
+    if [[ -z "$pkg" ]]; then
+        echo "Usage: remove_package <package>"
+        return 1
+    fi
+    pkg_log "REMOVE $pkg"
+    sudo apt-get remove -y "$pkg"
+    pkg_log "REMOVE $pkg OK"
+}
+
+autoremove_packages() {
+    pkg_autoremove
+}
+

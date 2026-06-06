@@ -63,8 +63,25 @@ kmod_install_boot() {
     sudo mkdir -p "/lib/modules/${kver}/extra"
     sudo cp "$KMOD_KO" "/lib/modules/${kver}/extra/"
     sudo depmod -a
-    echo "$KMOD_NAME" | sudo tee "/etc/modules-load.d/${KMOD_NAME}.conf" >/dev/null
+    echo "$KMOD_NAME" | sudo tee /etc/modules-load.d/${KMOD_NAME}.conf >/dev/null
     echo "✓ Auto-load configured"
     echo "Test: sudo modprobe $KMOD_NAME"
     echo "Reboot to verify"
+}
+
+# Non-interactive CLI functions
+build_kmod() {
+    kmod_build
+}
+
+load_kmod() {
+    kmod_insmod
+}
+
+unload_kmod() {
+    kmod_rmmod
+}
+
+show_kmod_status() {
+    kmod_status
 }

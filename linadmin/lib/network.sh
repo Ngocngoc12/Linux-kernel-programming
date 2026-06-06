@@ -45,3 +45,35 @@ net_client_interactive() {
     log_msg "linux_prog client $host:$port"
     run_and_show "TCP Client ($host:$port)" "$C_BIN" client "$host" "$port" "$msg"
 }
+
+# Non-interactive CLI functions
+show_network_info() {
+    echo "=== Interfaces ==="
+    ip -o link show | awk -F': ' '{print $2}' | while read -r iface; do
+        local ip mac state
+        ip=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' || echo "N/A")
+        mac=$(ip link show "$iface" 2>/dev/null | grep -oP '(?<=link/ether\s)[0-9a-f:]{17}' || echo "N/A")
+        state=$(cat /sys/class/net/"$iface"/operstate 2>/dev/null || echo "unknown")
+        printf "Interface: %-10s | State: %-8s | IP: %-15s | MAC: %s\n" "$iface" "$state" "$ip" "$mac"
+    done
+    
+    echo ""
+    echo "=== Routing Table ==="
+    ip route show
+}
+
+test_connection() {
+    local host="$1"
+    if [[ -z "$host" ]]; then
+        echo "Usage: test_connection <host>"
+        return 1
+    fi
+    echo "Testing connection to $host..."
+    ping -c 3 "$host"
+}
+
+show_listening_ports() {
+    echo "=== Listening TCP Ports ==="
+    ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || ss -tln
+}
+

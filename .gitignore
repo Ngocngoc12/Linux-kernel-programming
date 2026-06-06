@@ -8,3 +8,5 @@ linadmin/kmod/modules.order
 linadmin/logs/backup_*.tar.gz
 linadmin/logs/cron_backup*
 linadmin/logs/apt_history.log
+linadmin/logs/linadmin.log
+linadmin/web/node_modules/

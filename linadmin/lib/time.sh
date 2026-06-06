@@ -44,3 +44,27 @@ time_set_tz_interactive() {
     log_msg "set_tz: $tz"
     run_and_show "Set Timezone: $tz" sudo timedatectl set-timezone "$tz"
 }
+
+# Non-interactive CLI functions
+enable_ntp() {
+    time_ntp_on
+}
+
+set_timezone() {
+    local tz="$1"
+    if [[ -z "$tz" ]]; then
+        echo "Usage: set_timezone <timezone>"
+        return 1
+    fi
+    sudo timedatectl set-timezone "$tz"
+    echo "✓ Timezone set to $tz"
+    time_status
+    if [[ -n "${LOG_FILE:-}" ]]; then
+        echo "[$(date -Iseconds)] set_timezone: $tz" >> "$LOG_FILE"
+    fi
+}
+
+show_time_status() {
+    time_status
+}
+

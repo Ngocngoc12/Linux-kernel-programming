@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinAdmin — Ubuntu System Management Platform</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient & Screen Effects -->
+  <div class="ambient-aurora"></div>
+  <div class="crt-overlay" id="crtOverlay"></div>
+  <div class="crt-scanline-bar" id="crtScanline"></div>
+
+  <div class="container">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-logo">
+          <span class="led-indicator led-pulse"></span>LinAdmin
+        </span>
+        <span class="sidebar-subtitle">SYSTEM PLATFORM</span>
+      </div>
+      
+      <div class="sidebar-content">
+        <div class="sidebar-section">
+          <div class="sidebar-title">Dashboard</div>
+          <div class="sidebar-item active" data-page="overview" onclick="app.showPage('overview')">Overview</div>
+        </div>
+        
+        <div class="sidebar-section">
+          <div class="sidebar-title">Shell Scripts</div>
+          <div class="sidebar-item" data-page="files" onclick="app.showPage('files')">File Management</div>
+          <div class="sidebar-item" data-page="scheduler" onclick="app.showPage('scheduler')">Scheduler (Cron)</div>
+          <div class="sidebar-item" data-page="time" onclick="app.showPage('time')">Time & NTP</div>
+          <div class="sidebar-item" data-page="packages" onclick="app.showPage('packages')">Packages (APT)</div>
+        </div>
+        
+        <div class="sidebar-section">
+          <div class="sidebar-title">C Programs</div>
+          <div class="sidebar-item" data-page="processes" onclick="app.showPage('processes')">Processes</div>
+          <div class="sidebar-item" data-page="network" onclick="app.showPage('network')">Network & Sockets</div>
+        </div>
+        
+        <div class="sidebar-section">
+          <div class="sidebar-title">System</div>
+          <div class="sidebar-item" data-page="kmod" onclick="app.showPage('kmod')">Kernel Module</div>
+        </div>
+      </div>
+
+    </div>
+    
+    <!-- MAIN WORKSPACE -->
+    <div class="main">
+      <!-- HEADER -->
+      <div class="header">
+        <div class="header-title-area">
+          <h1 id="pageTitle">Overview</h1>
+          <p id="pageSubtitle">System status and resource monitoring</p>
+        </div>
+        
+        <!-- HUD configuration controls -->
+        <div class="hud-config-controls">
+          <div class="theme-dropdown-wrapper">
+            <select id="themeSelector" class="theme-select" onchange="app.changeTheme(this.value)">
+              <option value="cyberpunk">PROTOCOL // CYBER-NEON</option>
+              <option value="toxic">PROTOCOL // TOXIC-WASTE</option>
+              <option value="synthwave">PROTOCOL // SYNTH-SUNSET</option>
+              <option value="hacker">PROTOCOL // MATRIX-CORE</option>
+            </select>
+          </div>
+          <button id="crtToggleBtn" class="hud-config-button" onclick="app.toggleCrt()">CRT: ON</button>
+        </div>
+        
+        <div class="sys-stats-banner">
+          <div class="sys-stat-item">
+            <span class="sys-stat-label">Hostname</span>
+            <span class="sys-stat-value" id="hdrHostname">Loading...</span>
+          </div>
+          <div class="sys-stat-item">
+            <span class="sys-stat-label">IP Address</span>
+            <span class="sys-stat-value" id="hdrIp">Loading...</span>
+          </div>
+          <div class="sys-stat-item">
+            <span class="sys-stat-label">Uptime</span>
+            <span class="sys-stat-value" id="hdrUptime">Loading...</span>
+          </div>
+          <div class="sys-stat-item">
+            <span class="sys-stat-label">Kernel</span>
+            <span class="sys-stat-value" id="hdrKernel">Loading...</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- MAIN CONTENT AREA -->
+      <div class="content" id="content"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api';
+    
+    class LinAdmin {
+      constructor() {
+        this.currentPage = 'overview';
+        this.processesData = [];
+        this.logTimer = null;
+        this.statusTimer = null;
+        this.timeTimer = null;
+        this.isRunningTimeCommand = false;
+        
+        // Custom Theme and CRT configurations
+        this.currentTheme = localStorage.getItem('linadmin-theme') || 'cyberpunk';
+        this.crtEnabled = localStorage.getItem('linadmin-crt') !== 'false'; // default true
+        
+        this.init();
+      }
+      
+      init() {
+        this.applyTheme(this.currentTheme);
+        this.applyCrt(this.crtEnabled);
+        
+        // Update theme dropdown select state
+        const themeSelector = document.getElementById('themeSelector');
+        if (themeSelector) themeSelector.value = this.currentTheme;
+        
+        // Add single-click to cycle themes on empty space click
+        document.body.addEventListener('click', (e) => {
+          const tag = e.target.tagName.toLowerCase();
+          if (tag === 'input' || tag === 'select' || tag === 'button' || tag === 'option' || tag === 'a' || tag === 'code' || 
+              e.target.closest('.terminal') || e.target.closest('button') || e.target.closest('.sidebar') || 
+              e.target.closest('.header') || e.target.closest('.card') || e.target.closest('.stat-card') || 
+              e.target.closest('table') || e.target.closest('form') || e.target.closest('.form-group')) {
+            return;
+          }
+          this.cycleTheme();
+        });
+        
+        this.showPage('overview');
+        this.refreshHeaderStats();
+        this.statusTimer = setInterval(() => this.refreshHeaderStats(), 10000);
+      }
+      
+      changeTheme(theme) {
+        this.currentTheme = theme;
+        localStorage.setItem('linadmin-theme', theme);
+        this.applyTheme(theme);
+      }
+      
+      cycleTheme() {
+        const themes = ['cyberpunk', 'toxic', 'synthwave', 'hacker'];
+        let nextIndex = (themes.indexOf(this.currentTheme) + 1) % themes.length;
+        const nextTheme = themes[nextIndex];
+        this.changeTheme(nextTheme);
+        
+        // Update selection UI dropdown
+        const themeSelector = document.getElementById('themeSelector');
+        if (themeSelector) themeSelector.value = nextTheme;
+      }
+      
+      applyTheme(theme) {
+        document.body.className = '';
+        if (theme !== 'cyberpunk') {
+          document.body.classList.add(`theme-${theme}`);
+        }
+      }
+      
+      toggleCrt() {
+        this.crtEnabled = !this.crtEnabled;
+        localStorage.setItem('linadmin-crt', this.crtEnabled);
+        this.applyCrt(this.crtEnabled);
+      }
+      
+      applyCrt(enabled) {
+        const overlay = document.getElementById('crtOverlay');
+        const scanline = document.getElementById('crtScanline');
+        const btn = document.getElementById('crtToggleBtn');
+        
+        if (enabled) {
+          if (overlay) overlay.style.display = 'block';
+          if (scanline) scanline.style.display = 'block';
+          if (btn) btn.textContent = 'CRT: ON';
+        } else {
+          if (overlay) overlay.style.display = 'none';
+          if (scanline) scanline.style.display = 'none';
+          if (btn) btn.textContent = 'CRT: OFF';
+        }
+      }
+      
+      async refreshHeaderStats() {
+        try {
+          const response = await fetch(`${API_BASE}/status`);
+          const data = await response.json();
+          
+          document.getElementById('hdrHostname').textContent = data.hostname || 'N/A';
+          document.getElementById('hdrKernel').textContent = data.kernel || 'N/A';
+          document.getElementById('hdrUptime').textContent = data.uptime || 'N/A';
+          
+          const netResp = await fetch(`${API_BASE}/network`);
+          const netData = await netResp.json();
+          let primaryIp = '127.0.0.1';
+          if (netData.interfaces && netData.interfaces.length > 0) {
+            for (const iface of netData.interfaces) {
+              if (iface.ifname !== 'lo' && iface.addr_info && iface.addr_info.length > 0) {
+                primaryIp = iface.addr_info[0].local;
+                break;
+              }
+            }
+          }
+          document.getElementById('hdrIp').textContent = primaryIp;
+          
+          if (this.currentPage === 'overview') {
+            const memUsed = data.memory.used_mb;
+            const memTotal = data.memory.total_mb;
+            const memPct = Math.round((memUsed / memTotal) * 100);
+            
+            const cardCpu = document.getElementById('ovCpu');
+            const cardMem = document.getElementById('ovMem');
+            const cardDisk = document.getElementById('ovDisk');
+            const cardUptime = document.getElementById('ovUptime');
+            
+            if (cardCpu) cardCpu.textContent = data.load_avg || 'N/A';
+            if (cardMem) cardMem.textContent = `${memUsed} / ${memTotal} MB (${memPct}%)`;
+            if (cardDisk) cardDisk.textContent = data.disk_usage || 'N/A';
+            if (cardUptime) cardUptime.textContent = data.uptime || 'N/A';
+          }
+        } catch (err) {
+          console.error('Failed to load system header status:', err);
+        }
+      }
+      
+      showPage(page) {
+        this.currentPage = page;
+        
+        if (this.logTimer) {
+          clearInterval(this.logTimer);
+          this.logTimer = null;
+        }
+        if (this.timeTimer) {
+          clearInterval(this.timeTimer);
+          this.timeTimer = null;
+        }
+        
+        document.querySelectorAll('.sidebar-item').forEach(item => {
+          if (item.dataset.page === page) {
+            item.classList.add('active');
+          } else {
+            item.classList.remove('active');
+          }
+        });
+        
+        const content = document.getElementById('content');
+        content.innerHTML = '';
+        
+        switch(page) {
+          case 'overview':
+            this.setHeader('Overview', 'Real-time activity log and system monitor');
+            this.renderOverview();
+            break;
+          case 'files':
+            this.setHeader('File Management', 'File manager console utility');
+            this.renderFiles();
+            break;
+          case 'scheduler':
+            this.setHeader('Scheduler (Cron)', 'Cron scheduler daemon configuration');
+            this.renderScheduler();
+            break;
+          case 'time':
+            this.setHeader('Time & NTP', 'System time status and synchronization daemon');
+            this.renderTime();
+            this.timeTimer = setInterval(() => {
+              if (this.currentPage === 'time' && !this.isRunningTimeCommand) {
+                this.runTimeStatus();
+              }
+            }, 5000);
+            break;
+          case 'packages':
+            this.setHeader('Packages (APT)', 'Advanced Package Tool (APT) suite manager');
+            this.renderPackages();
+            break;
+          case 'processes':
+            this.setHeader('Processes', 'Task explorer and dynamic process runner');
+            this.renderProcesses();
+            break;
+          case 'network':
+            this.setHeader('Network & Sockets', 'Network diagnostic dashboard & C-sockets demo');
+            this.renderNetwork();
+            break;
+          case 'kmod':
+            this.setHeader('Kernel Module', 'Dynamic kernel module loader configuration');
+            this.renderKmod();
+            break;
+        }
+      }
+      
+      setHeader(title, subtitle) {
+        document.getElementById('pageTitle').textContent = title;
+        document.getElementById('pageSubtitle').textContent = subtitle;
+      }
+      
+      // ==========================================
+      // OVERVIEW
+      // ==========================================
+      renderOverview() {
+        const content = document.getElementById('content');
+        content.innerHTML = `
+          <div class="page-view">
+            <!-- Stat Cards -->
+            <div class="grid-auto">
+              <div class="stat-card">
+                <span class="stat-card-label">CPU Load (1/5/15 min)</span>
+                <span class="stat-card-value" id="ovCpu">...</span>
+              </div>
+              <div class="stat-card purple">
+                <span class="stat-card-label">Memory Usage</span>
+                <span class="stat-card-value" id="ovMem">...</span>
+              </div>
+              <div class="stat-card green">
+                <span class="stat-card-label">Disk Space (/)</span>
+                <span class="stat-card-value" id="ovDisk">...</span>
+              </div>
+              <div class="stat-card orange">
+                <span class="stat-card-label">Uptime</span>
+                <span class="stat-card-value" id="ovUptime">...</span>
+              </div>
+            </div>
+            
+            <!-- Logs Block -->
+            <div class="card">
+              <span class="card-title">System activity logs (logs/linadmin.log)</span>
+              <div class="terminal-wrapper">
+                <div class="terminal-header">
+                  <div class="terminal-dots">
+                    <div class="terminal-dot"></div>
+                    <div class="terminal-dot yellow"></div>
+                    <div class="terminal-dot green"></div>
+                  </div>
+                  <span class="terminal-title">tail -50 logs/linadmin.log</span>
+                </div>
+                <div class="terminal log-view" id="overviewLogs">Loading logs...</div>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        this.refreshHeaderStats();
+        this.pollLogs();
+        this.logTimer = setInterval(() => this.pollLogs(), 3000);
+      }
+      
+      async pollLogs() {
+        try {
+          const res = await fetch(`${API_BASE}/logs`);
+          const data = await res.json();
+          const logDiv = document.getElementById('overviewLogs');
+          if (logDiv) {
+            logDiv.textContent = data.logs || 'No logs recorded yet.';
+            logDiv.scrollTop = logDiv.scrollHeight;
+          }
+        } catch (err) {
+          console.error('Logs polling error:', err);
+        }
+      }
+      
+      // ==========================================
+      // FILE MANAGEMENT
+      // ==========================================
+      renderFiles() {
+        const content = document.getElementById('content');
+        content.innerHTML = `
+          <div class="page-view">
+            <div class="grid-2">
+              <div class="card">
+                <span class="card-title">Backup Directory</span>
+                <div class="form-group">
+                  <input type="text" id="fcBackupSrc" value="/home/user/data" placeholder="Absolute source path (e.g. /home/user/data)" style="flex: 1;">
+                  <button onclick="app.runFileBackup()">Backup</button>
+                </div>
+                <p style="font-size: 12px; color: #8b949e;">Calls <code>backup_directory [dir]</code> to create a tarball archive.</p>
+              </div>
+              
+              <div class="card">
+                <span class="card-title">Find Files by Extension</span>
+                <div class="form-group">
+                  <input type="text" id="fcFindDir" value="/tmp" placeholder="Search directory" style="flex: 1;">
+                  <input type="text" id="fcFindExt" value="log" placeholder="Extension (e.g., log)" style="width: 100px;">
+                  <button onclick="app.runFileFind()">Search</button>
+                </div>
+                <p style="font-size: 12px; color: #8b949e;">Calls <code>find_files_by_extension [dir] [ext]</code> inside the shell library.</p>
+              </div>
+            </div>
+            
+            <div class="card">
+              <span class="card-title">Cleanup Old Files</span>
+              <div class="form-group">
+                <input type="text" id="fcCleanupDir" value="/tmp" placeholder="Target cleanup directory" style="flex: 1;">
+                <input type="number" id="fcCleanupDays" value="7" style="width: 100px;" placeholder="Days">
+                <button onclick="app.runFileCleanup()" class="danger">Cleanup</button>
+              </div>
+              <p style="font-size: 12px; color: #8b949e;">Calls <code>cleanup_old_files [dir] [days]</code> to delete files older than N days.</p>
+            </div>
+            
+            <div class="card">
+              <span class="card-title">File Management Terminal</span>
+              <div class="terminal-wrapper">
+                <div class="terminal-header">
+                  <div class="terminal-dots">
+                    <div class="terminal-dot"></div>
+                    <div class="terminal-dot yellow"></div>
+                    <div class="terminal-dot green"></div>
+                  </div>
+                  <span class="terminal-title">lib/files.sh console</span>
+                </div>
+                <pre class="terminal" id="filesConsole">Idle. Trigger an action above.</pre>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      
+      async runFileBackup() {
+        const path = document.getElementById('fcBackupSrc').value.trim();
+        if (!path) return alert('Please enter a source directory path');
+        const cmd = `source lib/files.sh && backup_directory "${path}"`;
+        await this.showOutput('filesConsole', cmd);
+      }
+      
+      async runFileFind() {
+        const dir = document.getElementById('fcFindDir').value.trim();
+        const ext = document.getElementById('fcFindExt').value.trim();
+        if (!dir || !ext) return alert('Please fill in all fields');
+        const cmd = `source lib/files.sh && find_files_by_extension "${dir}" "${ext}"`;
+        await this.showOutput('filesConsole', cmd);
+      }
+      
+      async runFileCleanup() {
+        const dir = document.getElementById('fcCleanupDir').value.trim();
+        const days = document.getElementById('fcCleanupDays').value.trim();
+        if (!dir || !days) return alert('Please fill in all fields');
+        if (!confirm(`Are you sure you want to delete files in ${dir} older than ${days} days?`)) return;
+        const cmd = `source lib/files.sh && cleanup_old_files "${dir}" "${days}"`;
+        await this.showOutput('filesConsole', cmd);
+      }
+      
+      // ==========================================
+      // SCHEDULER
+      // ==========================================
+      renderScheduler() {
+        const content = document.getElementById('content');
+        content.innerHTML = `
+          <div class="page-view">
+            <div class="grid-2">
+              <div class="card">
+                <span class="card-title">Add Cron Job Backup (Daily 2:00 AM)</span>
+                <div class="form-group">
+                  <input type="text" id="schedDir" value="/home/user/data" placeholder="/home/user/data" style="flex: 1;">
+                  <button onclick="app.runAddCron()">Add Cron Job</button>
+                </div>
+                <p style="font-size: 12px; color: #8b949e;">Calls <code>add_cron_backup [dir]</code>. Installs backup job running daily at 2:00 AM.</p>
+              </div>
+              
+              <div class="card">
+                <span class="card-title">Remove Cron Job</span>
+                <div class="form-group">
+                  <input type="text" id="schedTag" value="LINADMIN_CRON" style="flex: 1;">
+                  <button onclick="app.runRemoveCron()" class="danger">Remove Jobs</button>
+                </div>
+                <p style="font-size: 12px; color: #8b949e;">Calls <code>remove_cron_backup [tag]</code> to remove cron jobs containing the specific tag.</p>
+              </div>
+            </div>
+            
+            <div class="card">
+              <span class="card-title">Current Cron Configuration</span>
+              <div class="button-group">
+                <button class="secondary" onclick="app.runListCron()">List Active Cron Jobs</button>
+              </div>
+              <div class="terminal-wrapper">
+                <div class="terminal-header">
+                  <div class="terminal-dots">
+                    <div class="terminal-dot"></div>
+                    <div class="terminal-dot yellow"></div>
+                    <div class="terminal-dot green"></div>
+                  </div>
+                  <span class="terminal-title">crontab -l</span>
+                </div>
+                <pre class="terminal" id="schedConsole">Loading cron list...</pre>
+              </div>
+            </div>
+          </div>
+        `;
+        this.runListCron();
+      }
+      
+      async runAddCron() {
+        const dir = document.getElementById('schedDir').value.trim();
+        if (!dir) return alert('Please enter a directory');
+        const cmd = `source lib/scheduler.sh && add_cron_backup "${dir}"`;
+        await this.showOutput('schedConsole', cmd);
+      }
+      
+      async runRemoveCron() {
+        const tag = document.getElementById('schedTag').value.trim();
+        if (!tag) return alert('Please enter a tag');
+        const cmd = `source lib/scheduler.sh && remove_cron_backup "${tag}"`;
+        await this.showOutput('schedConsole', cmd);
+      }
+      
+      async runListCron() {
+        const cmd = `source lib/scheduler.sh && list_cron_jobs`;
+        await this.showOutput('schedConsole', cmd);
+      }
+      
+      // ==========================================
+      // TIME & NTP
+      // ==========================================
+      renderTime() {
+        const content = document.getElementById('content');
+        content.innerHTML = `
+          <div class="page-view">
+            <div class="card">
+              <span class="card-title">Time Configuration</span>
+              <div class="button-group">
+                <button onclick="app.runTimeStatus()">Status (timedatectl)</button>
+                <button onclick="app.runTimeNtpOn()">Enable NTP</button>
+                <button onclick="app.runTimeNtpOff()" class="secondary">Disable NTP</button>
+              </div>
+              
+              <div class="form-group" style="margin-top: 20px;">
+                <label style="font-size: 13px; font-weight: 500; color: #fff;">Set timezone: </label>
+                <select id="tzSelect" style="min-width: 380px;">
+                  <option value="Asia/Hanoi">Asia/Hanoi (Hanoi, Vietnam)</option>
+                  <option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (Ho Chi Minh, Vietnam)</option>
+                  <option value="Asia/Bangkok">Asia/Bangkok (Thailand)</option>
+                  <option value="UTC">UTC (Coordinated Universal Time)</option>
+                  <option value="America/New_York">America/New_York (US Eastern)</option>
+                  <option value="Europe/London">Europe/London (London)</option>
+                  <option value="Asia/Tokyo">Asia/Tokyo (Japan)</option>
+                </select>
+                <button onclick="app.runSetTimezone()">Apply Timezone</button>
+              </div>
+            </div>
+            
+            <div class="card">
+              <span class="card-title">Time Status Output</span>
+              <div class="terminal-wrapper">
+                <div class="terminal-header">
+                  <div class="terminal-dots">
+                    <div class="terminal-dot"></div>
+                    <div class="terminal-dot yellow"></div>
+                    <div class="terminal-dot green"></div>
+                  </div>
+                  <span class="terminal-title">timedatectl status</span>
+                </div>
+                <pre class="terminal" id="timeConsole">Loading time status...</pre>
+              </div>
+            </div>
+          </div>
+        `;
+        this.runTimeStatus();
+      }
+      
+      async runTimeStatus() {
+        const cmd = `source lib/time.sh && show_time_status`;
+        await this.showOutput('timeConsole', cmd);
+      }
+      
+      async runTimeNtpOn() {
+        this.isRunningTimeCommand = true;
+        const cmd = `source lib/time.sh && enable_ntp`;
+        await this.showOutput('timeConsole', cmd);
+        this.isRunningTimeCommand = false;
+      }
+      
+      async runTimeNtpOff() {
+        this.isRunningTimeCommand = true;
+        const cmd = `source lib/time.sh && time_ntp_off`;
+        await this.showOutput('timeConsole', cmd);
+        this.isRunningTimeCommand = false;
+      }
+      
+      async runSetTimezone() {
+        this.isRunningTimeCommand = true;
+        const tz = document.getElementById('tzSelect').value;
+        const cmd = `source lib/time.sh && set_timezone "${tz}"`;
+        await this.showOutput('timeConsole', cmd);
+        this.isRunningTimeCommand = false;
+      }
+      
+      // ==========================================
+      // PACKAGES (APT)
+      // ==========================================
+      renderPackages() {
+        const content = document.getElementById('content');
+        content.innerHTML = `
+          <div class="page-view">
+            <div class="card">
+              <span class="card-title">APT Operations</span>
+              <div class="button-group">
+                <button onclick="app.runAptUpdate()">APT Update</button>
+                <button onclick="app.runAptAutoremove()">APT Autoremove</button>
+                <button onclick="app.runAptHistory()" class="secondary">View APT Action History</button>
+              </div>
+              
+              <div class="grid-2" style="margin-top: 20px;">
+                <div class="form-group">
+                  <input type="text" id="pkgInstallName" value="htop" placeholder="Package name (e.g. htop)" style="flex: 1;">
+                  <button onclick="app.runAptInstall()">Install</button>
+                </div>
+                <div class="form-group">
+                  <input type="text" id="pkgRemoveName" value="htop" placeholder="Package name" style="flex: 1;">
+                  <button onclick="app.runAptRemove()" class="danger">Remove</button>
+                </div>
+              </div>
+            </div>
+            
+            <div class="card">
+              <span class="card-title">APT Command Terminal</span>
+              <div class="terminal-wrapper">
+                <div class="terminal-header">
+                  <div class="terminal-dots">
+                    <div class="terminal-dot"></div>
+                    <div class="terminal-dot yellow"></div>
+                    <div class="terminal-dot green"></div>
+                  </div>
+                  <span class="terminal-title">apt-get outputs</span>
+                </div>
+                <pre class="terminal" id="packagesConsole">Idle. Choose an operation above.</pre>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      
+      async runAptUpdate() {
+        const cmd = `source lib/packages.sh && pkg_update`;
+        await this.showOutput('packagesConsole', cmd);
+      }
+      
+      async runAptAutoremove() {
+        const cmd = `source lib/packages.sh && autoremove_packages`;
+        await this.showOutput('packagesConsole', cmd);
+      }
+      
+      async runAptHistory() {
+        const cmd = `source lib/packages.sh && pkg_view_history`;
+        await this.showOutput('packagesConsole', cmd);
+      }
+      
+      async runAptInstall() {
+        const pkg = document.getElementById('pkgInstallName').value.trim();
+        if (!pkg) return alert('Enter package name');
+        const cmd = `source lib/packages.sh && install_package "${pkg}"`;
+        await this.showOutput('packagesConsole', cmd);
+      }
+      
+      async runAptRemove() {
+        const pkg = document.getElementById('pkgRemoveName').value.trim();
+        if (!pkg) return alert('Enter package name');
+        const cmd = `source lib/packages.sh && remove_package "${pkg}"`;
+        await this.showOutput('packagesConsole', cmd);
+      }
+      
+      // ==========================================
+      // PROCESSES
+      // ==========================================
+      renderProcesses() {
+        const content = document.getElementById('content');
+        content.innerHTML = `
+          <div class="page-view">
+            <!-- Process kill and compile -->
+            <div class="grid-2">
+              <div class="card">
+                <span class="card-title">Process Actions</span>
+                <div class="form-group">
+                  <input type="text" id="procKillPid" value="1234" placeholder="PID to kill" style="width: 140px;">
+                  <button onclick="app.runKillProcess()" class="danger">Kill Process</button>
+                </div>
+              </div>
+              <div class="card">
+                <span class="card-title">Compile C Program (linux_prog.c)</span>
+                <div class="button-group">
+                  <button onclick="app.runCompileC()">Compile C (gcc)</button>
+                  <button onclick="app.runProcC()" class="secondary">Run C Proc Mode</button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Process list -->
+            <div class="card">
+              <span class="card-title">Running Processes</span>
+              <div class="button-group">
+                <button class="secondary active" id="btnProcAll" onclick="app.filterProcesses('all')">All</button>
+                <button class="secondary" id="btnProcMem" onclick="app.filterProcesses('mem')">By Memory ↓</button>
+                <button class="secondary" id="btnProcCpu" onclick="app.filterProcesses('cpu')">By CPU ↓</button>
+                <button onclick="app.loadProcesses()">Refresh Table</button>
+              </div>
+              
+              <div class="table-wrapper" style="max-height: 400px; overflow-y: auto;">
+                <table id="processesTable">
+                  <thead>
+                    <tr>
+                      <th>USER</th>
+                      <th>PID</th>
+                      <th>%CPU</th>
+                      <th>%MEM</th>
+                      <th>VSZ</th>
+                      <th>RSS</th>
+                      <th>STAT</th>
+                      <th>START</th>
+                      <th>TIME</th>
+                      <th>COMMAND</th>
+                    </tr>
+                  </thead>
+                  <tbody id="processesTableBody">
+                    <tr><td colspan="10" style="text-align: center;">Loading process list...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <div class="card">
+              <span class="card-title">Execution Terminal</span>
+              <div class="terminal-wrapper">
+                <div class="terminal-header">
+                  <div class="terminal-dots">
+                    <div class="terminal-dot"></div>
+                    <div class="terminal-dot yellow"></div>
+                    <div class="terminal-dot green"></div>
+                  </div>
+                  <span class="terminal-title">processes output</span>
+                </div>
+                <pre class="terminal" id="processesConsole">Idle.</pre>
+              </div>
+            </div>
+          </div>
+        `;
+        this.loadProcesses();
+      }
+      
+      async loadProcesses() {
+        try {
+          const res = await fetch(`${API_BASE}/processes`);
+          const data = await res.json();
+          this.processesData = data.processes || [];
+          this.displayProcesses(this.processesData);
+        } catch (err) {
+          console.error('Failed to load processes:', err);
+        }
+      }
+      
+      filterProcesses(type) {
+        document.querySelectorAll('#btnProcAll, #btnProcMem, #btnProcCpu').forEach(btn => btn.classList.remove('active'));
+        
+        let sorted = [...this.processesData];
+        if (type === 'mem') {
+          document.getElementById('btnProcMem').classList.add('active');
+          sorted.sort((a, b) => parseFloat(b.mem) - parseFloat(a.mem));
+        } else if (type === 'cpu') {
+          document.getElementById('btnProcCpu').classList.add('active');
+          sorted.sort((a, b) => parseFloat(b.cpu) - parseFloat(a.cpu));
+        } else {
+          document.getElementById('btnProcAll').classList.add('active');
+        }
+        this.displayProcesses(sorted);
+      }
+      
+      displayProcesses(list) {
+        const body = document.getElementById('processesTableBody');
+        if (!body) return;
+        
+        if (list.length === 0) {
+          body.innerHTML = `<tr><td colspan="10" style="text-align: center;">No processes found.</td></tr>`;
+          return;
+        }
+        
+        body.innerHTML = list.map(p => `
+          <tr>
+            <td>${p.user}</td>
+            <td><strong>${p.pid}</strong></td>
+            <td>${p.cpu}</td>
+            <td>${p.mem}</td>
+            <td>${p.vsz}</td>
+            <td>${p.rss}</td>
+            <td>${p.stat}</td>
+            <td>${p.start}</td>
+            <td>${p.time}</td>
+            <td style="max-width: 300px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${p.command}">${p.command}</td>
+          </tr>
+        `).join('');
+      }
+      
+      async runKillProcess() {
+        const pid = document.getElementById('procKillPid').value.trim();
+        if (!pid) return alert('Enter PID');
+        const cmd = `source lib/processes.sh && kill_process "${pid}"`;
+        await this.showOutput('processesConsole', cmd);
+        this.loadProcesses();
+      }
+      
+      async runCompileC() {
+        const cmd = `source lib/processes.sh && cprog_build`;
+        await this.showOutput('processesConsole', cmd);
+      }
+      
+      async runProcC() {
+        const cmd = `source lib/processes.sh && proc_run_interactive`;
+        await this.showOutput('processesConsole', cmd);
+      }
+      
+      // ==========================================
+      // NETWORK & SOCKETS
+      // ==========================================
+      renderNetwork() {
+        const content = document.getElementById('content');
+        content.innerHTML = `
+          <div class="page-view">
+            <!-- Ping / ports -->
+            <div class="grid-2">
+              <div class="card">
+                <span class="card-title">Test Connection (Ping)</span>
+                <div class="form-group">
+                  <input type="text" id="netPingHost" value="google.com" style="flex: 1;">
+                  <button onclick="app.runPingTest()">Ping</button>
+                </div>
+              </div>
+              <div class="card">
+                <span class="card-title">Port Monitoring</span>
+                <button onclick="app.runListeningPorts()">List Listening Ports</button>
+              </div>
+            </div>
+            
+            <!-- C program file/net mode -->
+            <div class="grid-2">
+              <div class="card">
+                <span class="card-title">C File Operations Mode</span>
+                <button onclick="app.runFileModeC()">Run File mode (read/write/stat)</button>
+              </div>
+              <div class="card">
+                <span class="card-title">C Network Interfaces Mode</span>
+                <button onclick="app.runNetModeC()">Run Net mode (interfaces)</button>
+              </div>
+            </div>
+            
+            <!-- Side-by-side TCP client/server terminal demo -->
+            <div class="card">
+              <span class="card-title">C Socket Client-Server Demo (Port 9090)</span>
+              <div class="grid-2">
+                <div>
+                  <h4 style="margin-bottom: 8px; color: #fff;">1. TCP Server</h4>
+                  <div class="form-group">
+                    <input type="number" id="netSrvPort" value="9090" style="width: 100px;">
+                    <input type="text" id="netSrvReply" value="Hello from LinAdmin server" style="flex: 1;">
+                    <button onclick="app.startTCPServer()">Start Server</button>
+                  </div>
+                </div>
+                <div>
+                  <h4 style="margin-bottom: 8px; color: #fff;">2. TCP Client</h4>
+                  <div class="form-group">
+                    <input type="text" id="netCliHost" value="127.0.0.1" style="width: 120px;">
+                    <input type="number" id="netCliPort" value="9090" style="width: 90px;">
+                    <input type="text" id="netCliMsg" value="Hello from LinAdmin client" style="flex: 1;">
+                    <button onclick="app.connectTCPClient()">Connect Client</button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Terminals -->
+              <div class="grid-2" style="margin-top: 20px;">
+                <div class="terminal-wrapper">
+                  <div class="terminal-header">
+                    <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div></div>
+                    <span class="terminal-title">TCP Server Console</span>
+                  </div>
+                  <pre class="terminal" id="netServerConsole" style="height: 200px;">Server idle.</pre>
+                </div>
+                
+                <div class="terminal-wrapper">
+                  <div class="terminal-header">
+                    <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div></div>
+                    <span class="terminal-title">TCP Client Console</span>
+                  </div>
+                  <pre class="terminal" id="netClientConsole" style="height: 200px;">Client idle.</pre>
+                </div>
+              </div>
+            </div>
+            
+            <div class="card">
+              <span class="card-title">General Network Terminal</span>
+              <div class="terminal-wrapper">
+                <div class="terminal-header">
+                  <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div></div>
+                  <span class="terminal-title">network logs</span>
+                </div>
+                <pre class="terminal" id="networkConsole">Idle.</pre>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      
+      async runPingTest() {
+        const host = document.getElementById('netPingHost').value.trim();
+        if (!host) return alert('Enter host');
+        const cmd = `source lib/network.sh && test_connection "${host}"`;
+        await this.showOutput('networkConsole', cmd);
+      }
+      
+      async runListeningPorts() {
+        const cmd = `source lib/network.sh && show_listening_ports`;
+        await this.showOutput('networkConsole', cmd);
+      }
+      
+      async runFileModeC() {
+        const cmd = `source lib/network.sh && file_run_interactive`;
+        await this.showOutput('networkConsole', cmd);
+      }
+      
+      async runNetModeC() {
+        const cmd = `source lib/network.sh && net_run_interactive`;
+        await this.showOutput('networkConsole', cmd);
+      }
+      
+      async startTCPServer() {
+        const port = document.getElementById('netSrvPort').value.trim();
+        const reply = document.getElementById('netSrvReply').value.trim();
+        const serverConsole = document.getElementById('netServerConsole');
+        
+        serverConsole.textContent = `Starting TCP Server on port ${port}...\nWaiting for connection...`;
+        
+        const cmd = `c/linux_prog server "${port}" "${reply}"`;
+        this.execCmdAsync(cmd, serverConsole);
+      }
+      
+      async connectTCPClient() {
+        const host = document.getElementById('netCliHost').value.trim();
+        const port = document.getElementById('netCliPort').value.trim();
+        const msg = document.getElementById('netCliMsg').value.trim();
+        const clientConsole = document.getElementById('netClientConsole');
+        
+        clientConsole.textContent = `Connecting to ${host}:${port}...\n`;
+        
+        const cmd = `c/linux_prog client "${host}" "${port}" "${msg}"`;
+        await this.showOutput('netClientConsole', cmd);
+      }
+      
+      async execCmdAsync(cmd, element) {
+        try {
+          const res = await fetch(`${API_BASE}/command`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cmd })
+          });
+          const data = await res.json();
+          if (data.error) {
+            element.textContent = `[Error] ${data.error}`;
+          } else {
+            element.textContent = data.output || '(server exited with no output)';
+          }
+        } catch (err) {
+          element.textContent = `[Network Error] ${err.message}`;
+        }
+      }
+      
+      // ==========================================
+      // KERNEL MODULE
+      // ==========================================
+      renderKmod() {
+        const content = document.getElementById('content');
+        content.innerHTML = `
+          <div class="page-view">
+            <div class="card">
+              <span class="card-title">Kernel Module Control (hello_kmod.ko)</span>
+              
+              <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
+                <span style="font-weight: 600; color: #fff;">Status:</span>
+                <span class="badge" id="kmodStatusBadge">Checking...</span>
+              </div>
+              
+              <div class="button-group">
+                <button onclick="app.runBuildKmod()">Build Module (.ko)</button>
+                <button onclick="app.runLoadKmod()">Load Module (insmod)</button>
+                <button onclick="app.runUnloadKmod()" class="danger">Unload Module (rmmod)</button>
+                <button onclick="app.runKmodStatus()" class="secondary">Verify (lsmod / proc)</button>
+                <button onclick="app.runKmodDmesg()" class="secondary">Show dmesg</button>
+                <button onclick="app.runKmodBoot()" class="secondary">Configure Auto-load at Boot</button>
+              </div>
+            </div>
+            
+            <div class="grid-2">
+              <div class="card">
+                <span class="card-title">Contents of /proc/hello_kmod</span>
+                <div class="terminal-wrapper">
+                  <div class="terminal-header">
+                    <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div></div>
+                    <span class="terminal-title">cat /proc/hello_kmod</span>
+                  </div>
+                  <pre class="terminal" id="kmodProcConsole" style="height: 180px;">Unavailable (module not loaded).</pre>
+                </div>
+              </div>
+              
+              <div class="card">
+                <span class="card-title">Kernel Operations Terminal</span>
+                <div class="terminal-wrapper">
+                  <div class="terminal-header">
+                    <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot yellow"></div><div class="terminal-dot green"></div></div>
+                    <span class="terminal-title">kmod stdout</span>
+                  </div>
+                  <pre class="terminal" id="kmodConsole" style="height: 180px;">Idle.</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        this.updateKmodState();
+      }
+      
+      async updateKmodState() {
+        try {
+          const res = await fetch(`${API_BASE}/kmod`);
+          const data = await res.json();
+          
+          const badge = document.getElementById('kmodStatusBadge');
+          const procConsole = document.getElementById('kmodProcConsole');
+          
+          if (badge) {
+            badge.textContent = data.loaded ? '✓ LOADED' : '✗ NOT LOADED';
+            badge.className = `badge ${data.loaded ? 'success' : 'danger'}`;
+          }
+          
+          if (procConsole) {
+            if (data.loaded && data.proc) {
+              procConsole.textContent = data.proc;
+            } else {
+              procConsole.textContent = data.proc || 'Unavailable (module not loaded).';
+            }
+          }
+        } catch (err) {
+          console.error('Kmod status update error:', err);
+        }
+      }
+      
+      async runBuildKmod() {
+        const cmd = `source lib/kmod.sh && build_kmod`;
+        await this.showOutput('kmodConsole', cmd);
+        this.updateKmodState();
+      }
+      
+      async runLoadKmod() {
+        const cmd = `source lib/kmod.sh && load_kmod`;
+        await this.showOutput('kmodConsole', cmd);
+        this.updateKmodState();
+      }
+      
+      async runUnloadKmod() {
+        const cmd = `source lib/kmod.sh && unload_kmod`;
+        await this.showOutput('kmodConsole', cmd);
+        this.updateKmodState();
+      }
+      
+      async runKmodStatus() {
+        const cmd = `source lib/kmod.sh && show_kmod_status`;
+        await this.showOutput('kmodConsole', cmd);
+        this.updateKmodState();
+      }
+      
+      async runKmodDmesg() {
+        const cmd = `dmesg | grep hello_kmod | tail -20 || echo "No hello_kmod messages in dmesg"`;
+        await this.showOutput('kmodConsole', cmd);
+      }
+      
+      async runKmodBoot() {
+        const cmd = `source lib/kmod.sh && kmod_install_boot`;
+        await this.showOutput('kmodConsole', cmd);
+      }
+      
+      // ==========================================
+      // COMMON EXECUTION METHOD
+      // ==========================================
+      async exec(cmd) {
+        const response = await fetch(`${API_BASE}/command`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cmd })
+        });
+        return await response.json();
+      }
+      
+      closeTerminalPopup() {
+        const modal = document.getElementById('hudTerminalPopup');
+        if (modal) {
+          modal.classList.add('hidden');
+        }
+      }
+      
+      async showOutput(terminalId, cmd) {
+        // 1. Show the popup modal
+        const modal = document.getElementById('hudTerminalPopup');
+        const popupTitle = document.getElementById('hudPopupTitle');
+        const popupTerminal = document.getElementById('hudPopupTerminal');
+        
+        if (modal && popupTerminal) {
+          modal.classList.remove('hidden');
+          if (popupTitle) popupTitle.textContent = `EXECUTING // ${cmd.substring(0, 45)}${cmd.length > 45 ? '...' : ''}`;
+          popupTerminal.textContent = `$ ${cmd}\n\nRunning command...`;
+          popupTerminal.classList.remove('error');
+          popupTerminal.scrollTop = 0;
+        }
+
+        // 2. Also output to the static terminal on the page if it exists
+        const terminal = document.getElementById(terminalId);
+        if (terminal) {
+          terminal.textContent = `$ ${cmd}\n\nRunning command...`;
+          terminal.classList.remove('error');
+        }
+        
+        const result = await this.exec(cmd);
+        
+        if (result.error) {
+          const errMsg = `Command: ${cmd}\n\n[Error] ${result.error}\n\nOutput:\n${result.output || ''}`;
+          if (popupTerminal) {
+            popupTerminal.textContent = errMsg;
+            popupTerminal.classList.add('error');
+          }
+          if (terminal) {
+            terminal.textContent = errMsg;
+            terminal.classList.add('error');
+          }
+        } else {
+          const successMsg = result.output || '(no output)';
+          if (popupTerminal) {
+            popupTerminal.textContent = successMsg;
+          }
+          if (terminal) {
+            terminal.textContent = successMsg;
+          }
+        }
+      }
+    }
+    
+    const app = new LinAdmin();
+  </script>
+
+  <!-- Floating HUD Terminal Popup -->
+  <div id="hudTerminalPopup" class="hud-modal hidden">
+    <div class="hud-modal-overlay" onclick="app.closeTerminalPopup()"></div>
+    <div class="hud-modal-content card">
+      <div class="terminal-header">
+        <div class="terminal-dots">
+          <div class="terminal-dot"></div>
+          <div class="terminal-dot yellow"></div>
+          <div class="terminal-dot green"></div>
+        </div>
+        <span class="terminal-title" id="hudPopupTitle">EXECUTION MODULE ACTIVE</span>
+        <button class="hud-modal-close-icon" onclick="app.closeTerminalPopup()">×</button>
+      </div>
+      <pre class="terminal" id="hudPopupTerminal">Executing command...</pre>
+      <div class="hud-modal-footer">
+        <button class="secondary" onclick="app.closeTerminalPopup()">[ CLOSE HUD CONSOLE ]</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
