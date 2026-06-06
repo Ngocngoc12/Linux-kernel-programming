@@ -213,8 +213,18 @@ sudo rmmod hello_kmod
 **Technology:**
 - Frontend: HTML/CSS/JavaScript (vanilla - no frameworks)
 - Backend: Express.js + Node.js
-- Theme: Dark mode professional UI
+- Theme: Creative Cyber-HUD with 4 dynamic color protocols:
+  1. **PROTOCOL // CYBER-NEON** (Default): Cyan + Magenta + Deep Violet
+  2. **PROTOCOL // TOXIC-WASTE**: Radioactive Lime + Amber Gold + Obsidian
+  3. **PROTOCOL // SYNTH-SUNSET**: Retrowave Pink + Sunset Violet + Midnight
+  4. **PROTOCOL // MATRIX-CORE**: Matrix Green + Classic Terminal Black
 - Port: 3000
+
+**Special Features:**
+- **Single-Click Theme Cycling**: Click on any empty background area to instantly cycle color themes.
+- **CRT Scanline Filter**: Real-time analog scanline overlay and flicker effect (can be toggled on/off in the header toolbar).
+- **Floating HUD Terminal**: Executing commands dynamically triggers a floating terminal modal dialog for real-time output viewing without scrolling.
+- **State Persistence**: Theme selections and CRT status are cached via `localStorage`.
 
 **Pages:**
 - Dashboard: Quick system metrics

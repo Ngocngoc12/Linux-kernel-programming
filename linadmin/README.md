@@ -1,6 +1,6 @@
 # LinAdmin — Quản lý Hệ thống Linux
 
-**Mục đích:** Project học tập **Lập trình nhân Linux** bao gồm Shell scripting, Lập trình C (processes/files/sockets/network), và Linux Kernel Module.
+**Mục đích:** Project học tập **Lập trình nhân Linux** bao gồm Shell scripting, Lập trình C (processes/files/sockets/network), Linux Kernel Module, và Giao diện Web Cyber-HUD sáng tạo.
 
 **Cấu trúc:**
 ```
@@ -20,6 +20,11 @@ linadmin/
 ├── kmod/
 │   ├── hello_kmod.c         # Kernel module
 │   └── Makefile             # Build kernel module
+├── web/
+│   ├── server.js            # Express.js Backend Server
+│   └── public/
+│       ├── index.html       # Web Dashboard chính (Cyber-HUD)
+│       └── style.css        # Hệ thống CSS 4 theme màu sắc
 ├── logs/
 │   └── linadmin.log         # Ghi lại tất cả hoạt động
 └── README.md                # File này
@@ -458,6 +463,6 @@ dmesg | tail -5
 
 ---
 
-**Tác giả:** Linux System Programming Student  
-**Ngày:** May 2026  
+**Tác giả:** Ngocngoc12 (hoangngoc12022004@gmail.com)  
+**Ngày:** June 2026  
 **Yêu cầu:** Ubuntu 24.04+, Kernel 6.0+, sudo privileges
